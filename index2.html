@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ping Pong Game</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Rajdhani:wght@600&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #1a1a2e;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  min-height: 100vh;
+  font-family: 'Orbitron', monospace;
+  user-select: none; gap: 12px;
+}
+body::before {
+  content:''; position:fixed; inset:0;
+  background-image: linear-gradient(rgba(0,180,255,0.03) 1px,transparent 1px), linear-gradient(90deg,rgba(0,180,255,0.03) 1px,transparent 1px);
+  background-size:36px 36px; pointer-events:none;
+}
+h1 { font-size:16px; letter-spacing:6px; background:linear-gradient(90deg,#00eeff,#ff00cc); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+
+.scorebar { display:flex; align-items:center; justify-content:space-between; width:680px; background:rgba(255,255,255,0.04); border:1px solid rgba(0,200,255,0.15); border-radius:10px; padding:10px 28px; }
+.sc-side { display:flex; flex-direction:column; align-items:center; gap:2px; }
+.sc-label { font-size:9px; letter-spacing:3px; color:rgba(255,255,255,0.3); }
+.sc-num { font-size:38px; font-weight:900; line-height:1; }
+.sc-num.blue { color:#3399ff; } .sc-num.red { color:#ff4444; }
+.sc-num.pop { animation:pop 0.4s ease-out; }
+@keyframes pop { 0%{transform:scale(1.6);} 70%{transform:scale(0.9);} 100%{transform:scale(1);} }
+.sc-sep { font-size:26px; color:rgba(255,255,255,0.12); }
+
+.game-wrap { position:relative; border-radius:8px; overflow:hidden; box-shadow:0 0 40px rgba(0,180,255,0.08),0 0 80px rgba(0,0,0,0.6); border:1px solid rgba(0,200,255,0.2); }
+canvas { display:block; }
+
+.overlay { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; background:rgba(10,12,22,0.88); backdrop-filter:blur(6px); z-index:20; transition:opacity 0.3s; }
+.overlay.hidden { opacity:0; pointer-events:none; }
+.ov-label { font-size:10px; letter-spacing:4px; color:rgba(255,255,255,0.3); }
+.ov-main  { font-size:36px; font-weight:900; letter-spacing:4px; }
+.ov-main.cyan    { color:#00eeff; } .ov-main.magenta { color:#ff00cc; } .ov-main.white { color:#fff; }
+.ov-sub  { font-size:11px; letter-spacing:2px; color:rgba(255,255,255,0.25); }
+.btn-ov { padding:12px 44px; background:transparent; border:1px solid #00eeff; border-radius:6px; color:#00eeff; font-family:'Orbitron',monospace; font-size:11px; letter-spacing:4px; cursor:pointer; transition:all 0.2s; }
+.btn-ov:hover { background:rgba(0,238,255,0.1); }
+.btn-ov:active { transform:scale(0.95); }
+
+.controls { display:flex; align-items:flex-start; justify-content:space-between; width:680px; gap:16px; }
+.ctrl-group { display:flex; flex-direction:column; align-items:center; gap:8px; }
+.ctrl-title { font-size:9px; letter-spacing:3px; color:rgba(255,255,255,0.25); }
+
+.dpad { display:grid; grid-template-areas:". up ." "left . right" ". down ."; gap:5px; grid-template-columns:repeat(3,46px); grid-template-rows:repeat(3,46px); }
+.abtn { width:46px; height:46px; border:1px solid rgba(255,255,255,0.12); border-radius:8px; background:rgba(255,255,255,0.05); color:white; font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.1s; -webkit-tap-highlight-color:transparent; touch-action:manipulation; }
+.abtn:hover { background:rgba(0,180,255,0.15); border-color:#00aaff; }
+.abtn.pressed { background:rgba(0,200,255,0.3); border-color:#00eeff; transform:scale(0.92); }
+[data-dir="up"] { grid-area:up; } [data-dir="left"] { grid-area:left; } [data-dir="right"] { grid-area:right; } [data-dir="down"] { grid-area:down; }
+
+.pause-btn { padding:10px 24px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,238,0,0.3); border-radius:8px; color:#ffee00; font-family:'Orbitron',monospace; font-size:10px; letter-spacing:3px; cursor:pointer; transition:all 0.2s; }
+.pause-btn:hover { background:rgba(255,238,0,0.08); }
+
+.legend { display:flex; flex-direction:column; gap:6px; }
+.leg-row { display:flex; align-items:center; gap:8px; font-size:10px; letter-spacing:1px; color:rgba(255,255,255,0.3); }
+.leg-dot { width:10px; height:10px; border-radius:2px; flex-shrink:0; }
+
+#flash { position:fixed; inset:0; pointer-events:none; z-index:99; opacity:0; transition:opacity 0.05s; }
+</style>
+</head>
+<body>
+<div id="flash"></div>
+<h1>Ping Pong Game</h1>
+
+<div class="scorebar">
+  <div class="sc-side"><div class="sc-label">PLAYER</div><div class="sc-num blue" id="ps">0</div></div>
+  <div class="sc-sep">:</div>
+  <div class="sc-side"><div class="sc-label">AI</div><div class="sc-num red" id="as">0</div></div>
+</div>
+
+<div class="game-wrap">
+  <canvas id="c" width="680" height="420"></canvas>
+  <div class="overlay" id="sc-start">
+    <div class="ov-label">READY TO PLAY</div>
+    <div class="ov-main white">PING PONG</div>
+    <div class="ov-sub">USE ▲ ▼ BUTTONS OR ↑ ↓ KEYS</div>
+    <button class="btn-ov" onclick="startGame()">START GAME</button>
+  </div>
+  <div class="overlay hidden" id="sc-pause">
+    <div class="ov-label">GAME PAUSED</div>
+    <div class="ov-main white">PAUSED</div>
+    <button class="btn-ov" onclick="togglePause()">RESUME</button>
+  </div>
+  <div class="overlay hidden" id="sc-goal">
+    <div class="ov-label" id="goal-lbl">PLAYER SCORES!</div>
+    <div class="ov-main" id="goal-main">GOAL!</div>
+  </div>
+  <div class="overlay hidden" id="sc-over">
+    <div class="ov-label" id="over-lbl">MATCH OVER</div>
+    <div class="ov-main" id="over-main">VICTORY</div>
+    <div class="ov-sub" id="over-score"></div>
+    <button class="btn-ov" onclick="startGame()">PLAY AGAIN</button>
+  </div>
+</div>
+
+<div class="controls">
+  <div class="ctrl-group">
+    <div class="ctrl-title">MOVE PADDLE</div>
+    <div class="dpad">
+      <div class="abtn" data-dir="up"   id="btn-up"   >▲</div>
+      <div class="abtn" data-dir="left" id="btn-left" >◀</div>
+      <div class="abtn" data-dir="right"id="btn-right">▶</div>
+      <div class="abtn" data-dir="down" id="btn-down" >▼</div>
+    </div>
+  </div>
+  <div class="ctrl-group" style="justify-content:center;padding-top:28px;">
+    <button class="pause-btn" id="pause-btn" onclick="togglePause()">⏸ PAUSE</button>
+  </div>
+  <div class="ctrl-group">
+    <div class="ctrl-title">LEGEND</div>
+    <div class="legend">
+      <div class="leg-row"><div class="leg-dot" style="background:#3399ff;"></div>YOUR PADDLE (BLUE)</div>
+      <div class="leg-row"><div class="leg-dot" style="background:#ff4444;"></div>AI PADDLE (RED)</div>
+      <div class="leg-row"><div class="leg-dot" style="background:#ffee00;border-radius:50%;"></div>BALL (YELLOW)</div>
+      <div class="leg-row" style="margin-top:4px;color:rgba(255,255,255,0.18);">FIRST TO 7 WINS</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const AC = new (window.AudioContext || window.webkitAudioContext)();
+const res = () => AC.state==='suspended' && AC.resume();
+function tone(type,freq,dur,vol,d=0){res();const o=AC.createOscillator(),g=AC.createGain();o.connect(g);g.connect(AC.destination);o.type=type;o.frequency.value=freq;const t=AC.currentTime+d;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(vol,t+0.01);g.gain.exponentialRampToValueAtTime(0.001,t+dur);o.start(t);o.stop(t+dur+0.02);}
+function sndWall()  {tone('square',500,0.05,0.1);}
+function sndPaddle(){tone('triangle',320,0.08,0.22);tone('triangle',450,0.06,0.16,0.03);}
+function sndGoalP() {[523,659,784,880,1046].forEach((f,i)=>tone('triangle',f,0.22,0.25,i*0.1));}
+function sndGoalA() {[380,300,240,190,150].forEach((f,i)=>tone('sawtooth',f,0.2,0.22,i*0.1));}
+function sndWin()   {[523,659,784,659,784,1046,880,1046].forEach((f,i)=>tone('triangle',f,0.25,0.28,i*0.13));}
+function sndLose()  {[400,320,260,200,160,130].forEach((f,i)=>tone('sawtooth',f,0.22,0.2,i*0.12));}
+
+const cv=document.getElementById('c'), ctx=cv.getContext('2d');
+const W=cv.width, H=cv.height, WIN=7, PW=12, PH=82, BR=9;
+let state='start', pScore=0, aScore=0, keys={}, btnState={}, raf, parts=[];
+let player, ai, ball;
+
+function initAll(dir=1){player={x:28,y:H/2-PH/2};ai={x:W-28-PW,y:H/2-PH/2};newBall(dir);}
+function newBall(dir=1){const a=(Math.random()*0.7-0.35),s=5.5;ball={x:W/2,y:H/2+(Math.random()-0.5)*60,vx:dir*s*Math.cos(a),vy:s*Math.sin(a),spd:s,trail:[]};}
+
+function burst(x,y,color,n=12){for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,s=1.5+Math.random()*4;parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:1,decay:0.025+Math.random()*0.03,r:2.5+Math.random()*3,color});}}
+function flash(c){const f=document.getElementById('flash');f.style.background=c;f.style.opacity='0.2';setTimeout(()=>f.style.opacity='0',80);}
+
+function draw(){
+  // Court
+  const cg=ctx.createLinearGradient(0,0,0,H);
+  cg.addColorStop(0,'#1a6b2f');cg.addColorStop(0.5,'#1e7a35');cg.addColorStop(1,'#1a6b2f');
+  ctx.fillStyle=cg; ctx.fillRect(0,0,W,H);
+
+  // Outer border
+  ctx.strokeStyle='rgba(255,255,255,0.7)'; ctx.lineWidth=3;
+  ctx.strokeRect(6,6,W-12,H-12);
+  // Inner border
+  ctx.strokeStyle='rgba(255,255,255,0.25)'; ctx.lineWidth=1;
+  ctx.strokeRect(20,20,W-40,H-40);
+
+  // Center dashed line
+  ctx.setLineDash([10,8]); ctx.strokeStyle='rgba(255,255,255,0.55)'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(W/2,6); ctx.lineTo(W/2,H-6); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Net posts top/bottom
+  ctx.fillStyle='rgba(80,80,80,0.7)';
+  ctx.fillRect(W/2-4,2,8,14); ctx.fillRect(W/2-4,H-16,8,14);
+
+  // Center circle
+  ctx.strokeStyle='rgba(255,255,255,0.18)'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.arc(W/2,H/2,48,0,Math.PI*2); ctx.stroke();
+
+  // Score shadows on court
+  ctx.font='bold 76px Orbitron,monospace'; ctx.textAlign='center';
+  ctx.fillStyle='rgba(255,255,255,0.11)';
+  ctx.fillText(pScore,W/4,H/2+26); ctx.fillText(aScore,W*3/4,H/2+26);
+
+  // Trail
+  ball.trail.forEach((t,i)=>{
+    const al=(i/ball.trail.length)*0.45, r=BR*(i/ball.trail.length)*0.8;
+    ctx.beginPath(); ctx.arc(t.x,t.y,Math.max(0,r),0,Math.PI*2);
+    ctx.fillStyle=`rgba(255,220,0,${al})`; ctx.fill();
+  });
+
+  // Ball glow
+  const bg=ctx.createRadialGradient(ball.x,ball.y,0,ball.x,ball.y,BR*2.8);
+  bg.addColorStop(0,'rgba(255,255,80,0.35)'); bg.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.beginPath(); ctx.arc(ball.x,ball.y,BR*2.8,0,Math.PI*2); ctx.fillStyle=bg; ctx.fill();
+
+  // Ball
+  const bGrd=ctx.createRadialGradient(ball.x-2,ball.y-2,0,ball.x,ball.y,BR);
+  bGrd.addColorStop(0,'#ffffff'); bGrd.addColorStop(0.3,'#ffee44'); bGrd.addColorStop(1,'#cc9900');
+  ctx.beginPath(); ctx.arc(ball.x,ball.y,BR,0,Math.PI*2); ctx.fillStyle=bGrd; ctx.fill();
+  ctx.strokeStyle='rgba(255,220,0,0.9)'; ctx.lineWidth=1.5; ctx.stroke();
+
+  // Paddles
+  drawPad(player,'#0a3d8f','#3399ff','#88ccff');
+  drawPad(ai,'#8f0a0a','#ff3333','#ff8888');
+
+  // Particles
+  parts.forEach(p=>{
+    ctx.beginPath(); ctx.arc(p.x,p.y,Math.max(0,p.r*p.life),0,Math.PI*2);
+    ctx.fillStyle=p.color.replace('rgb(','rgba(').replace(')',`,${p.life})`);
+    ctx.fill();
+  });
+}
+
+function drawPad(pad,dark,mid,light){
+  const x=pad.x, y=pad.y;
+  // Glow
+  const gl=ctx.createRadialGradient(x+PW/2,y+PH/2,0,x+PW/2,y+PH/2,32);
+  gl.addColorStop(0,mid+'44'); gl.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=gl; ctx.fillRect(x-20,y-20,PW+40,PH+40);
+  // Shadow
+  ctx.fillStyle='rgba(0,0,0,0.45)';
+  ctx.beginPath(); ctx.roundRect(x+3,y+3,PW,PH,5); ctx.fill();
+  // Body
+  const pg=ctx.createLinearGradient(x,y,x+PW,y);
+  pg.addColorStop(0,dark); pg.addColorStop(0.45,mid); pg.addColorStop(1,light);
+  ctx.beginPath(); ctx.roundRect(x,y,PW,PH,5); ctx.fillStyle=pg; ctx.fill();
+  // Shine
+  ctx.fillStyle='rgba(255,255,255,0.28)';
+  ctx.beginPath(); ctx.roundRect(x+2,y+7,3,PH-14,2); ctx.fill();
+  // Border
+  ctx.strokeStyle=light; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.roundRect(x,y,PW,PH,5); ctx.stroke();
+}
+
+function update(){
+  if(state!=='playing') return;
+  const spd=7;
+  const up=keys['ArrowUp']||keys['w']||keys['W']||btnState['up'];
+  const dn=keys['ArrowDown']||keys['s']||keys['S']||btnState['down'];
+  if(up)   player.y-=spd;
+  if(dn) player.y+=spd;
+  player.y=Math.max(8,Math.min(H-PH-8,player.y));
+
+  const aiC=ai.y+PH/2, diff=ball.y-aiC;
+  const aiSpd=Math.min(Math.abs(diff),4.6+aScore*0.18);
+  ai.y+=Math.sign(diff)*aiSpd;
+  ai.y=Math.max(8,Math.min(H-PH-8,ai.y));
+
+  ball.trail.push({x:ball.x,y:ball.y});
+  if(ball.trail.length>14) ball.trail.shift();
+  ball.x+=ball.vx; ball.y+=ball.vy;
+
+  // Wall
+  if(ball.y-BR<=8){ball.y=BR+8;ball.vy*=-1;sndWall();burst(ball.x,ball.y,'rgb(0,200,255)',5);}
+  if(ball.y+BR>=H-8){ball.y=H-BR-8;ball.vy*=-1;sndWall();burst(ball.x,ball.y,'rgb(0,200,255)',5);}
+
+  // Player hit
+  if(ball.vx<0&&ball.x-BR<=player.x+PW&&ball.x+BR>=player.x&&ball.y+BR>=player.y&&ball.y-BR<=player.y+PH){
+    ball.x=player.x+PW+BR+1;
+    const rel=(ball.y-(player.y+PH/2))/(PH/2), ang=rel*0.9;
+    ball.spd=Math.min(ball.spd+0.35,15);
+    ball.vx=Math.abs(ball.spd*Math.cos(ang)); ball.vy=ball.spd*Math.sin(ang);
+    sndPaddle(); flash('rgba(0,100,255,0.3)'); burst(ball.x,ball.y,'rgb(50,150,255)',14);
+  }
+  // AI hit
+  if(ball.vx>0&&ball.x+BR>=ai.x&&ball.x-BR<=ai.x+PW&&ball.y+BR>=ai.y&&ball.y-BR<=ai.y+PH){
+    ball.x=ai.x-BR-1;
+    const rel=(ball.y-(ai.y+PH/2))/(PH/2), ang=rel*0.9;
+    ball.spd=Math.min(ball.spd+0.35,15);
+    ball.vx=-Math.abs(ball.spd*Math.cos(ang)); ball.vy=ball.spd*Math.sin(ang);
+    sndPaddle(); flash('rgba(255,0,50,0.3)'); burst(ball.x,ball.y,'rgb(255,60,60)',14);
+  }
+
+  parts=parts.filter(p=>p.life>0.02);
+  parts.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=0.06;p.life-=p.decay;p.r*=0.97;});
+
+  if(ball.x<-20){aScore++;updSc('ai');sndGoalA();flash('rgba(255,0,0,0.25)');burst(60,H/2,'rgb(255,50,50)',28);showGoal('AI SCORES!','magenta',-1);}
+  if(ball.x>W+20){pScore++;updSc('player');sndGoalP();flash('rgba(0,255,100,0.2)');burst(W-60,H/2,'rgb(0,255,100)',28);showGoal('PLAYER SCORES!','cyan',1);}
+}
+
+function updSc(who){
+  const el=document.getElementById(who==='player'?'ps':'as');
+  el.textContent=who==='player'?pScore:aScore;
+  el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+}
+
+function showGoal(txt,cls,nd){
+  state='goal';
+  const s=document.getElementById('sc-goal');
+  document.getElementById('goal-lbl').textContent=txt;
+  const gm=document.getElementById('goal-main');
+  gm.textContent='GOAL!'; gm.className='ov-main '+cls;
+  s.classList.remove('hidden');
+  setTimeout(()=>{s.classList.add('hidden');if(pScore>=WIN||aScore>=WIN){endGame();}else{newBall(nd);state='playing';}},1400);
+}
+
+function endGame(){
+  state='over';
+  const pw=pScore>=WIN;
+  document.getElementById('over-lbl').textContent=pw?'YOU WIN THE MATCH':'AI WINS THE MATCH';
+  const om=document.getElementById('over-main');
+  om.textContent=pw?'VICTORY':'DEFEAT'; om.className='ov-main '+(pw?'cyan':'magenta');
+  document.getElementById('over-score').textContent=`${pScore} — ${aScore}`;
+  document.getElementById('sc-over').classList.remove('hidden');
+  pw?sndWin():sndLose();
+}
+
+function loop(){update();draw();raf=requestAnimationFrame(loop);}
+
+function startGame(){
+  res(); pScore=0; aScore=0;
+  document.getElementById('ps').textContent='0';
+  document.getElementById('as').textContent='0';
+  ['sc-start','sc-pause','sc-goal','sc-over'].forEach(id=>document.getElementById(id).classList.add('hidden'));
+  parts=[];
+  initAll(1); state='playing';
+  if(raf) cancelAnimationFrame(raf);
+  loop();
+}
+
+function togglePause(){
+  res();
+  if(state==='playing'){
+    state='paused';
+    document.getElementById('sc-pause').classList.remove('hidden');
+    document.getElementById('pause-btn').textContent='▶ RESUME';
+  } else if(state==='paused'){
+    state='playing';
+    document.getElementById('sc-pause').classList.add('hidden');
+    document.getElementById('pause-btn').textContent='⏸ PAUSE';
+  }
+}
+
+document.addEventListener('keydown',e=>{
+  keys[e.key]=true;
+  if(e.key===' '){e.preventDefault();togglePause();}
+  if(['ArrowUp','ArrowDown'].includes(e.key)) e.preventDefault();
+});
+document.addEventListener('keyup',e=>{ keys[e.key]=false; });
+
+// Button controls
+function setupBtn(id, dir){
+  const el=document.getElementById(id);
+  const on=()=>{btnState[dir]=true;el.classList.add('pressed');res();};
+  const off=()=>{btnState[dir]=false;el.classList.remove('pressed');};
+  el.addEventListener('mousedown',on);
+  el.addEventListener('touchstart',e=>{e.preventDefault();on();},{passive:false});
+  el.addEventListener('mouseup',off);
+  el.addEventListener('mouseleave',off);
+  el.addEventListener('touchend',off);
+  el.addEventListener('touchcancel',off);
+}
+setupBtn('btn-up','up');
+setupBtn('btn-down','down');
+
+initAll(1); draw();
+</script>
+</body>
+</html>
